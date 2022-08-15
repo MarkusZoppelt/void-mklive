@@ -712,16 +712,24 @@ set_rootpassword() {
 menu_useraccount() {
     local _firstpass _secondpass _desc _again
     local _groups _status _group _checklist
-    local _preset
+    local _preset _userlogin
 
     while true; do
         _preset=$(get_option USERLOGIN)
         [ -z "$_preset" ] && _preset="void"
         DIALOG --inputbox "Enter a primary login name:" ${INPUTSIZE} "$_preset"
         if [ $? -eq 0 ]; then
-            set_option USERLOGIN "$(cat $ANSWER)"
-            USERLOGIN_DONE=1
-            break
+            _userlogin="$(cat $ANSWER)"
+            # based on useradd(8) § Caveats
+            if [ "${#_userlogin}" -le 32 ] && [[ "${_userlogin}" =~ ^[a-z_][a-z0-9_-]*[$]?$ ]]; then
+                set_option USERLOGIN "${_userlogin}"
+                USERLOGIN_DONE=1
+                break
+            else
+                INFOBOX "Invalid login name! Please try again." 6 60
+                unset _userlogin
+                sleep 2 && clear && continue
+            fi
         else
             return
         fi
@@ -935,7 +943,7 @@ menu_lvm() {
 
 test_network() {
     rm -f xtraeme.asc && \
-        xbps-uhelper fetch http://alpha.de.repo.voidlinux.org/live/xtraeme.asc >$LOG 2>&1
+        xbps-uhelper fetch https://repo-default.voidlinux.org/live/xtraeme.asc >$LOG 2>&1
     if [ $? -eq 0 ]; then
         DIALOG --msgbox "Network is working properly!" ${MSGBOXSIZE}
         NETWORK_DONE=1
@@ -951,8 +959,8 @@ configure_wifi() {
         "SSID:" 1 1 "" 1 16 30 0 \
         "Encryption:" 2 1 "" 2 16 4 3 \
         "Password:" 3 1 "" 3 16 63 0 || return 1
-    set -- $(cat $ANSWER)
-    ssid="$1"; enc="$2"; pass="$3";
+    readarray -t values <<<$(cat $ANSWER)
+    ssid="${values[0]}"; enc="${values[1]}"; pass="${values[2]}"
 
     if [ -z "$ssid" ]; then
         DIALOG --msgbox "Invalid SSID." ${MSGBOXSIZE}
